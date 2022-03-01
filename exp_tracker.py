@@ -3,7 +3,9 @@ import os
 import re
 import sys
 import json
+import shutil
 import argparse
+import subprocess
 from pathlib import Path
 
 ### Helper functions invoked in the main routine
@@ -19,6 +21,7 @@ def setup(args):
     Check user-specified arguments, assign exp id, and create exp directory
     """
     assert os.path.isfile(args.file)
+    assert args.file.endswith(".py")    # Specialize to Python scripts for now
     assert args.gpus >= 0
 
     # Make the top-level experiment directory if it doesn't exist yet
@@ -43,6 +46,19 @@ def setup(args):
     return exp_dir
 
 
+def copy_script(file, exp_dir):
+    """
+    Copy experimental script to experiment directory, with appended suffix
+    """
+    # Append the experiment id to the name of the source file
+    base = Path(file).name[:-3]   # Remove .py suffix
+    exp_id = str(exp_dir).split(sep="_")[-1]
+    copy_path = exp_dir / f"{base}_{exp_id}.py"
+
+    # Copy the file
+    shutil.copy(file, copy_path)
+
+
 def main():
     # Grab all the user parameters from the command line
     parser = argparse.ArgumentParser(description="Run experiment scripts with Slurm, log the experimental setup")
@@ -59,6 +75,14 @@ def main():
     logging = setup_logging(exp_dir / "exp_record.log")
     logging.info("LOGGING CONFIGURATION")
     logging.info(json.dumps(vars(args), indent=4))
+    logging.info(f"EXP_DIR = {str(exp_dir)}")
+
+    # Copy the source file into the experiment directory
+    copy_script(args.file, exp_dir)
+
+    # Send source file to Slurm (sbatch) and log call details
+    call_info = to_slurm(args, exp_dir)
+    logging.info(call_info)
 
 
 if __name__ == "__main__":
