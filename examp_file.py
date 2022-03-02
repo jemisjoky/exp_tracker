@@ -2,4 +2,4 @@
 import time
 
 print("Hello World!")
-time.sleep(30)
+time.sleep(10)

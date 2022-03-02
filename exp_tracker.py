@@ -22,6 +22,7 @@ def setup(args):
     """
     assert os.path.isfile(args.file)
     assert args.file.endswith(".py")    # Specialize to Python scripts for now
+    assert args.mem_per_cpu > 0
     assert args.gpus >= 0
 
     # Make the top-level experiment directory if it doesn't exist yet
@@ -59,12 +60,38 @@ def copy_script(file, exp_dir):
     shutil.copy(file, copy_path)
 
 
+def to_slurm(args, exp_dir):
+    """
+    Send experimental script to Slurm (sbatch) with user-specified options
+    """
+    # Generate all the information for the call to sbatch
+    slurm_call = [
+        "sbatch",
+        # Name of Slurm job
+        f"--job-name=jorb_{str(exp_dir).split(sep='_')[-1]}",
+        # Location of Slurm output file
+        f"--output={str(exp_dir / 'slurm_log.out')}",
+        # Number of GPUs
+        f"--gpus={args.gpus}",
+        # Minimum memory per CPU
+        f"--mem-per-cpu={args.mem_per_cpu}G",
+        # Environment variables to pass to the experiment script
+        f"--export=LOG_DIR={str(exp_dir)},LOG_FILE={str(exp_dir / 'exp_record.log')}",
+        # Experiment script itself
+        args.file
+    ]
+
+    # Call Slurm with the generated arguments
+    return subprocess.run(slurm_call)
+
+
 def main():
     # Grab all the user parameters from the command line
     parser = argparse.ArgumentParser(description="Run experiment scripts with Slurm, log the experimental setup")
     parser.add_argument("file", type=str, help="Experiment file which will be run")
     parser.add_argument("message", type=str, help="Message describing details of the experiment")
     parser.add_argument("--log_dir", type=str, default=str(Path(sys.path[0]) / "log_dir"), help="Location of the top-level experiment log directory")
+    parser.add_argument("--mem-per-cpu", type=int, default=8, help="Minimum memory per CPU, in gigabytes")
     parser.add_argument("-G", "--gpus", type=int, default=0, help="Number of GPUs to allocate for experiment")
     args = parser.parse_args()
 
@@ -76,6 +103,10 @@ def main():
     logging.info("LOGGING CONFIGURATION")
     logging.info(json.dumps(vars(args), indent=4))
     logging.info(f"EXP_DIR = {str(exp_dir)}")
+
+    # Save message in standalone file, for ease of reference
+    with open(exp_dir / "message", "w") as f:
+        f.write(args.message + "\n")
 
     # Copy the source file into the experiment directory
     copy_script(args.file, exp_dir)
