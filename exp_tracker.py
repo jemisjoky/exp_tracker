@@ -60,7 +60,7 @@ def copy_script(file, exp_dir):
     shutil.copy(file, copy_path)
 
 
-def to_slurm(args, exp_dir):
+def to_slurm(args, exp_dir, script_args):
     """
     Send experimental script to Slurm (sbatch) with user-specified options
     """
@@ -78,8 +78,10 @@ def to_slurm(args, exp_dir):
         # Environment variables to pass to the experiment script
         f"--export=LOG_DIR={str(exp_dir)},LOG_FILE={str(exp_dir / 'exp_record.log')}",
         # Experiment script itself
-        args.file
+        args.file,
     ]
+    # Other arguments that will be fed to script
+    slurm_call += script_args
 
     # Call Slurm with the generated arguments
     return subprocess.run(slurm_call)
@@ -93,7 +95,7 @@ def main():
     parser.add_argument("--log_dir", type=str, default=str(Path(sys.path[0]) / "log_dir"), help="Location of the top-level experiment log directory")
     parser.add_argument("--mem-per-cpu", type=int, default=8, help="Minimum memory per CPU, in gigabytes")
     parser.add_argument("-G", "--gpus", type=int, default=0, help="Number of GPUs to allocate for experiment")
-    args = parser.parse_args()
+    args, script_args = parser.parse_known_args()
 
     # Setup new directory for this experiment
     exp_dir = setup(args)
@@ -112,7 +114,7 @@ def main():
     copy_script(args.file, exp_dir)
 
     # Send source file to Slurm (sbatch) and log call details
-    call_info = to_slurm(args, exp_dir)
+    call_info = to_slurm(args, exp_dir, script_args)
     logging.info(call_info)
 
 
